@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 - Johnathon Koster. All rights reserved.
+ * Copyright (c) 2016-2018 - Johnathon Koster. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -33,11 +33,19 @@ define(function (require, exports, module) {
     var AppInit = brackets.getModule("utils/AppInit"),
         MainViewManager = brackets.getModule("view/MainViewManager"),
         LanguageManager = brackets.getModule("language/LanguageManager"),
+        DefaultDialogs = brackets.getModule("widgets/DefaultDialogs"),
+        Dialogs = brackets.getModule("widgets/Dialogs"),
+        Commands = brackets.getModule("command/Commands"),
+        CommandManager = brackets.getModule("command/CommandManager"),
         Preferences = require("src/preferences/PreferencesManager"),
+        Package = brackets.getModule("extensibility/Package"),
         EditorManager = require("src/editor/EditorManager"),
         StyleManager = require("src/ui/StyleManager"),
-        LocaleStatusBar = require("src/ui/LocaleStatusBar");
-    
+        LocaleStatusBar = require("src/ui/LocaleStatusBar"),
+        Paths = require("src/utils/Paths");
+
+    var LIVE_DICTIONARIES_PATH = "https://s3.amazonaws.com/stillat/alice/stillat.linguistics-dictionary.zip";
+
     /**
      * Helper function to call all the various methods required for
      * Linguistics to work correctly.
@@ -48,20 +56,60 @@ define(function (require, exports, module) {
         EditorManager.setSpellCheckEnabled(Preferences.spellCheckEnabled);
         EditorManager.updateInterface();
     }
-    
+
     // Get everything rolling.
     AppInit.appReady(function () {
-        
+        // Check whether or not the dictionaries are available for use. If we cannot
+        // find the dictionary paths, we will prompt the user and install them
+        // automatically if they give us permission to do so.
+        appshell.fs.stat(Paths.getDictionaryPath(), function (err, modtime, isdir, size, realPath) {
+            if (typeof err !== 'undefined' && err !== null) {
+                if (err == appshell.fs.ERR_NOT_FOUND) {
+                    var checkFeaturesDialog = Dialogs.showModalDialog(
+                        DefaultDialogs.DIALOG_ID_INFO,
+                        "Alice",
+                        "Hello, there! It seems you are missing the dictionaries required for Alice to work. Would you like to download them now? We will restart Brackets after this to complete the installation.",
+                        [
+                            {
+                                className: Dialogs.DIALOG_BTN_CLASS_NORMAL,
+                                id: "cancel",
+                                text: "Not right now"
+                            },
+                            {
+                                className: Dialogs.DIALOG_BTN_CLASS_PRIMARY,
+                                id: "download",
+                                text: "Download Dictionaries"
+                            }
+                        ]
+                    );
+
+                    checkFeaturesDialog.getPromise().then(function (buttonId) {
+                        if (buttonId == "download") {
+                            var packageInstallation = Package.installFromURL(LIVE_DICTIONARIES_PATH);
+                            var installPromise = packageInstallation.promise;
+                            var self = this;
+                            installPromise.always(function (d) {
+                                CommandManager.execute(Commands.APP_RELOAD);
+                            });
+                        }
+                    });
+
+                }
+            }
+            console.log(err, modtime, isdir, size, realPath);
+        });
+
         Preferences.getPreferencesSystem().on("change", _updateEnvironment);
-        
+
         MainViewManager.on("currentFileChange", _updateEnvironment);
-        
+        MainViewManager.on("activePaneChange", _updateEnvironment);
+
         LanguageManager.on("languageModified", _updateEnvironment);
-        
+
         StyleManager.setup();
         // Set the initial locale.
         EditorManager.setLocale(Preferences.localeName);
         _updateEnvironment();
     });
-    
+
 });

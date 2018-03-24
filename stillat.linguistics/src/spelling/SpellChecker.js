@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 - Johnathon Koster. All rights reserved.
+ * Copyright (c) 2016-2018 - Johnathon Koster. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -84,6 +84,11 @@ define(function (require, exports, module) {
     };
     
     var _currentMode = "Mode.all";
+
+    /**
+     * A list of words ignored for the current session.
+     */
+    var _ignoredSessionWords = [];
     
     /**
      * Indicates if both the dictionary and affix files have loaded.
@@ -113,6 +118,16 @@ define(function (require, exports, module) {
      */
     function _isCommonTerm(word) {
         return (_commonProgrammingKeywords.indexOf(word) > -1);
+    }
+
+    /**
+     * Determines if a word was ignored for the duration of the session.
+     * 
+     * @param   {string} word The word to check.
+     * @returns {boolean}
+     */
+    function _isIgnored(word) {
+        return (_ignoredSessionWords.indexOf(word) > -1);
     }
     
     /**
@@ -204,6 +219,11 @@ define(function (require, exports, module) {
         // The idea here is we don't want to make a call to _typo.check() unless
         // we absolutely need to. We also want to eliminate as many false
         // positives as possible.
+
+        // Check if a word was ignored by the user.
+        if (_isIgnored(word)) {
+            return true;
+        }
         
         // Check if a word is "correct" by default.
         if (_isCommonTerm(word)) {
@@ -362,6 +382,15 @@ define(function (require, exports, module) {
         _currentMode = mode;
         UtilityManager.setModeName(mode);
     }
+
+    /**
+     * Adds a word to the list of ignored words for the session.
+     * 
+     * @param {string} word 
+     */
+    function ignoreWord(word) {
+        _ignoredSessionWords.push(word);
+    }
     
     // These events will provide enough information to accurately determine
     // if the spell checker is in an "initialized" state.
@@ -377,11 +406,13 @@ define(function (require, exports, module) {
         _initialized = true;
     });
     
+    exports.ignoreWord = ignoreWord;
     exports.setLocaleName = setLocaleName;
     exports.setSpellCheckEnabled = setSpellCheckEnabled;
     exports.getOverlay = getOverlay;
     exports.shouldIgnoreUppercaseWords = shouldSpellingIgnoreUppercaseWords;
     exports.suggest = suggest;
     exports.setModeName = setModeName;
+    exports._hasCorrectSpelling = _hasCorrectSpelling;
 
 });

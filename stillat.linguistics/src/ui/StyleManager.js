@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 - Johnathon Koster. All rights reserved.
+ * Copyright (c) 2016-2018 - Johnathon Koster. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -85,14 +85,14 @@ define(function (require, exports, module) {
      * 
      * @type {string}
      */
-    var _visualizationBaseCSS = ".cm-alice-error-visualization:not(.cm-url):not(.cm-tag):not(.cm-word){border-bottom:2px dotted;display:inline-block;position:relative}.cm-alice-error-visualization:not(.cm-url):not(.cm-tag):not(.cm-word):after{content:'';height:5px;width:100%;border-bottom:2px dotted;position:absolute;bottom:-3px;left:-2px}";
+    var _visualizationBaseCSS = ".cm-alice-error-visualization:not(.cm-url):not(.cm-tag):not(.cm-word){border-bottom:2px dotted;display:inline-block;position:relative}.cm-alice-error-visualization:not(.cm-url):not(.cm-tag):not(.cm-word):after{content:'';height:5px;width:100%;border-bottom:2px dotted;position:absolute;bottom:-3px;left:-2px}.alice-ignore{border-bottom:none!important;}.alice-ignore::after{border-bottom:none!important;}";
     
     /**
      * The Mustache template for visualization CSS.
      * 
      * @type {string}
      */
-    var _visualizationCSS = ".cm-{{ className }}:not(.cm-url):not(.cm-tag):not(.cm-word) {border-bottom-color: {{ color }};}.cm-{{ className }}:not(.cm-url):not(.cm-tag):not(.cm-word):after {border-bottom-color: {{ color }};}";
+    var _visualizationCSS = ".cm-{{ className }}:not(.cm-url):not(.cm-tag):not(.cm-word) {border-bottom-color: {{ color }};}.cm-{{ className }}:not(.cm-url):not(.cm-tag):not(.cm-word):after {border-bottom-color: {{ color }};}.alice-ignore{border-bottom:none!important;}.alice-ignore::after{border-bottom:none!important;}";
     
     /**
      * Creates the base CSS style elements and adds them to the DOM.

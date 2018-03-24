@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 - Johnathon Koster. All rights reserved.
+ * Copyright (c) 2016-2018 - Johnathon Koster. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -40,6 +40,18 @@ define(function (require, exports, module) {
         StatusBar = brackets.getModule("widgets/StatusBar");
 
     var COMMAND_NO_SUGGESTIONS = "linguistics.noSuggestions";
+
+    var COMMAND_IGNORE_WORD = "linguistics.ignoreWordForSession";
+    var COMMAND_IGNORE_ONCE = "linguistics.ignoreWordOnce";
+
+    var ALICE_IGNORE_MARKING = "alice-ignore";
+
+    var _firstDividerAlreadyCreated = false;
+
+    /**
+     * Used to store the active editor range.
+     */
+    var EDITOR_ACTIVE_RANGE = null;
     
     /**
      * Indicates if the spell checker is enabled or not.
@@ -141,6 +153,19 @@ define(function (require, exports, module) {
         return marker;
     }
 
+    function ignoreOnceAtSelection() {
+        var editor = EditorManager.getActiveEditor(),
+            cm = editor ? editor._codeMirror : null;
+        
+        if (cm) {
+            var activeRange = EDITOR_ACTIVE_RANGE;
+
+            cm.markText(activeRange.startCh, activeRange.endCh, {
+                className: ALICE_IGNORE_MARKING
+            });
+        }
+    }
+
     /**
      * Updates the CodeMirror instance by removing or adding overlays as necessary.
      */
@@ -227,11 +252,31 @@ define(function (require, exports, module) {
         return _spellCheckEnabled;
     }
     
-    function _isValidSelection(editor) {
+    function _isValidSelection(editor) {        
         if (editor.getSelections().length === 1) {
             var selection = editor.getSelection();
+
             if (selection.start.line === selection.end.line) {
-                var selectedText = editor.document.getRange(selection.start, selection.end);
+                var selectedText = '';
+
+                // Handles the case where we right click in a word without selections.
+                if (selection.end.ch == selection.start.ch) {
+                    var _codeMirrorRange = editor._codeMirror.findWordAt(editor._codeMirror.getCursor());
+                    selectedText = editor._codeMirror.getRange(_codeMirrorRange.anchor, _codeMirrorRange.head);
+                    EDITOR_ACTIVE_RANGE = {
+                        line: selection.start.line,
+                        startCh: _codeMirrorRange.anchor,
+                        endCh: _codeMirrorRange.head
+                    };
+                } else {
+                    selectedText = editor.document.getRange(selection.start, selection.end);
+                    EDITOR_ACTIVE_RANGE = {
+                        line: selection.start.line,
+                        startCh: selection.start,
+                        endCh: selection.end
+                    };
+                }
+
                 // The check that determines if a selection contains word separators could later
                 // be expanded on so that snake_cased_words are allowed, and any leading or
                 // trailing word separators are appropriately accounted for.
@@ -239,9 +284,19 @@ define(function (require, exports, module) {
                     return selectedText;
                 }
             }
-        }
         
+        }
+
         return false;
+    }
+
+    function _selectionContainsSpellingError(selectedWord) {
+        // Note: this used to use an unreliable method of checking CSS classes
+        // or attempting to determine if the current position has some
+        // marker from the underlying CodeMirror instance. Checking
+        // if the word is simply mispelled again is much more
+        // reliable and has a negligible impact on perf.
+        return !SpellChecker._hasCorrectSpelling(selectedWord);
     }
     
     var _suggestions = [];
@@ -262,8 +317,18 @@ define(function (require, exports, module) {
     function _cleanupSpellingContextMenu() {
         if (_createdMenuItems.length > 0) {
             _createdMenuItems.forEach(function (item, index, array) {
-                EditorContextMenu.removeMenuItem(item._command._id);
+                try {
+                    if (item.isDivider) {
+                        EditorContextMenu.removeMenuDivider(item);
+                    } else {
+                        if (typeof item !== 'undefined' && typeof item._command !== 'undefined') {
+                            EditorContextMenu.removeMenuItem(item._command._id);
+                        }
+                    }
+                } catch (e) {
+                }
             });
+            _createdMenuItems = [];
         }
     }
     
@@ -272,7 +337,20 @@ define(function (require, exports, module) {
             cm = editor ? editor._codeMirror : null;
         
         if (cm) {
-            cm.replaceSelection(newWord);
+            // We will use the EDITOR_ACTIVE_RANGE variable
+            // and the CodeMirror API to make the final
+            // spelling adjustment for the end user.
+            cm.replaceRange(
+                newWord,
+                {
+                    line: EDITOR_ACTIVE_RANGE.line,
+                    ch: EDITOR_ACTIVE_RANGE.startCh.ch
+                },
+                {
+                    line: EDITOR_ACTIVE_RANGE.line,
+                    ch: EDITOR_ACTIVE_RANGE.endCh.ch
+                }
+            );
         }
     }
     
@@ -297,9 +375,38 @@ define(function (require, exports, module) {
         var editor = EditorManager.getActiveEditor();
         var selectedWord = _isValidSelection(editor);
         if (selectedWord !== false) {
-            var isSpellingError = $(".CodeMirror-selectedtext:first").hasClass("cm-alice-spelling-visualization");
+            var isSpellingError = _selectionContainsSpellingError(selectedWord);
             if (isSpellingError) {
                 _suggestions = SpellChecker.suggest(selectedWord);
+
+                /*
+                if (!_firstDividerAlreadyCreated) {
+                    var _beforeOptsMenuDivider = EditorContextMenu.addMenuDivider();
+                    _createdMenuItems.push(_beforeOptsMenuDivider);
+                    _firstDividerAlreadyCreated = true;
+                    console.log('adding divider?');
+                }*/
+
+                // Context menu item to ignore all occurrences throughout the writing session.
+                var addToIgnoreList = _getNewContextMenuCommandId();
+                CommandManager.register("Ignore All", addToIgnoreList, function () {
+                    SpellChecker.ignoreWord(selectedWord);
+                    updateInterface();
+                });
+                var _ignoreMenuItem = EditorContextMenu.addMenuItem(addToIgnoreList);
+                _createdMenuItems.push(_ignoreMenuItem);
+
+                // Context menu item to ignore just the one occurrence throughout the writing session.
+                var ignoreOnce = _getNewContextMenuCommandId();
+                CommandManager.register("Ignore Once", ignoreOnce, function () {
+                    ignoreOnceAtSelection();
+                });
+                var _ignoreOnceMenuItem = EditorContextMenu.addMenuItem(ignoreOnce);
+                _createdMenuItems.push(_ignoreOnceMenuItem);
+
+               // var _afterOptsMenuDivider = EditorContextMenu.addMenuDivider();
+               // _createdMenuItems.push(_afterOptsMenuDivider);
+
                 if (_suggestions.length > 0) {
                     // If we have suggestions, we should add a context
                     // menu item for each suggestion. Clicking on a

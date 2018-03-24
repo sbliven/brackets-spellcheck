@@ -1,0 +1,9 @@
+{
+    "name": "stillat.linguistics",
+    "title": "Alice - Spell Checking",
+    "description": "Adds offline spell checking capabilities to Brackets",
+    "homepage": "https://stillat.com",
+    "version": "1.0.0",
+    "author": "John Koster <john@stillat.com> (https://stillat.com)",
+    "license": "MIT"
+}
